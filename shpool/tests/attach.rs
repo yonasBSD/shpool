@@ -1139,125 +1139,6 @@ fn prompt_prefix_fish() -> anyhow::Result<()> {
 
 #[test]
 #[timeout(30000)]
-fn motd_dump() -> anyhow::Result<()> {
-    support::dump_err(|| {
-        // set up the config
-        let tmp_dir = tempfile::TempDir::with_prefix("shpool-test-config")?;
-        let tmp_dir_path = if env::var("SHPOOL_LEAVE_TEST_LOGS").is_ok() {
-            // leave the tmp files around for later inspection if we have been asked
-            // to leave the logs in place.
-            tmp_dir.into_path()
-        } else {
-            PathBuf::from(tmp_dir.path())
-        };
-        eprintln!("building config in {:?}", tmp_dir_path);
-        let motd_file = tmp_dir_path.join("motd.txt");
-        {
-            let mut f = fs::File::create(&motd_file)?;
-            f.write_all("MOTD_MSG".as_bytes())?;
-        }
-        let config_tmpl = fs::read_to_string(support::testdata_file("motd_dump.toml.tmpl"))?;
-        let config_contents = config_tmpl.replace("TMP_MOTD_MSG_FILE", motd_file.to_str().unwrap());
-        let config_file = tmp_dir_path.join("motd_dump.toml");
-        {
-            let mut f = fs::File::create(&config_file)?;
-            f.write_all(config_contents.as_bytes())?;
-        }
-
-        // spawn a daemon based on our custom config
-        let mut daemon_proc = support::daemon::Proc::new(&config_file, DaemonArgs::default())
-            .context("starting daemon proc")?;
-
-        let mut attach_proc =
-            daemon_proc.attach("sh1", Default::default()).context("starting attach proc")?;
-        let mut line_matcher = attach_proc.line_matcher()?;
-        line_matcher.scan_until_re(".*MOTD_MSG.*")?;
-
-        Ok(())
-    })
-}
-
-#[test]
-#[timeout(30000)]
-fn motd_pager() -> anyhow::Result<()> {
-    support::dump_err(|| {
-        // set up the config
-        let tmp_dir = tempfile::TempDir::with_prefix("shpool-test-config")?;
-        let tmp_dir_path = if env::var("SHPOOL_LEAVE_TEST_LOGS").is_ok() {
-            // leave the tmp files around for later inspection if we have been asked
-            // to leave the logs in place.
-            tmp_dir.into_path()
-        } else {
-            PathBuf::from(tmp_dir.path())
-        };
-        eprintln!("building config in {:?}", tmp_dir_path);
-        let motd_file = tmp_dir_path.join("motd.txt");
-        {
-            let mut f = fs::File::create(&motd_file)?;
-            f.write_all("MOTD_MSG\n".as_bytes())?;
-        }
-        let config_tmpl = fs::read_to_string(support::testdata_file("motd_pager.toml.tmpl"))?;
-        let config_contents = config_tmpl.replace("TMP_MOTD_MSG_FILE", motd_file.to_str().unwrap());
-        let config_file = tmp_dir_path.join("motd_pager.toml");
-        {
-            let mut f = fs::File::create(&config_file)?;
-            f.write_all(config_contents.as_bytes())?;
-        }
-
-        // spawn a daemon based on our custom config
-        let daemon_proc = support::daemon::Proc::new(
-            &config_file,
-            DaemonArgs {
-                extra_env: vec![(String::from("TERM"), String::from("xterm"))],
-                ..DaemonArgs::default()
-            },
-        )
-        .context("starting daemon proc")?;
-
-        // We need to manually spawn our attach proc because
-        // the motd gets printed immediately, so we can't always
-        // attach a line matcher in time.
-        let mut child = Command::new(support::shpool_bin()?)
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .arg("--socket")
-            .arg(&daemon_proc.socket_path)
-            .arg("--config-file")
-            .arg(config_file)
-            .arg("attach")
-            .arg("sh1")
-            .spawn()
-            .context("spawning attach process")?;
-
-        // The attach shell should be spawned and have read the
-        // initial prompt after half a second.
-        std::thread::sleep(time::Duration::from_millis(500));
-        child.kill().context("killing child")?;
-
-        let mut stderr = child.stderr.take().context("missing stderr")?;
-        let mut stderr_str = String::from("");
-        stderr.read_to_string(&mut stderr_str).context("slurping stderr")?;
-        assert!(stderr_str.is_empty());
-
-        let mut stdout = child.stdout.take().context("missing stdout")?;
-        let mut stdout_str = String::from("");
-        stdout.read_to_string(&mut stdout_str).context("slurping stdout")?;
-        let stdout_msg_re = Regex::new(".*MOTD_MSG.*")?;
-        eprintln!("stdout_str: {}", stdout_str);
-        assert!(stdout_msg_re.is_match(&stdout_str));
-
-        // Less includes the name of the file in its output, so we test
-        // for the presence of the stem used to contrust the tmp file
-        // passed to the pager.
-        let stdout_file_re = Regex::new(".*\\(END\\).*")?;
-        assert!(stdout_file_re.is_match(&stdout_str));
-
-        Ok(())
-    })
-}
-
-#[test]
-#[timeout(30000)]
 fn dynamic_config_change() -> anyhow::Result<()> {
     support::dump_err(|| {
         let tmp_dir = tempfile::TempDir::with_prefix("shpool-test-config")?;
@@ -1270,8 +1151,6 @@ fn dynamic_config_change() -> anyhow::Result<()> {
         };
         eprintln!("building config in {:?}", tmp_dir_path);
         let config_tmpl = fs::read_to_string(support::testdata_file("dynamic_config.toml.tmpl"))?;
-        let config_file = tmp_dir_path.join("motd_pager.toml");
-        fs::write(&config_file, &config_tmpl)?;
 
         let mut daemon_proc =
             support::daemon::Proc::new(&config_file, DaemonArgs { ..DaemonArgs::default() })

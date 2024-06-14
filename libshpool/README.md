@@ -17,5 +17,3 @@ but you need to take care of a few things manually.
 
 1. Handle the `version` subcommand. Since libshpool is a library, the output
    will not be very good if the library handles the versioning.
-2. Depend on the `motd` crate and call `motd::handle_reexec()` in your `main`
-   function.

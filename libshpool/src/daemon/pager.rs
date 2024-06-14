@@ -24,10 +24,6 @@
   than dealing with adding even more conditions to the normal
   codepaths it seems better to have a simple and self-contained
   implementation in a dedicated module.
-
-  This is used for displaying the motd in pager mode, though it
-  works as a general out-of-band message display mechanism
-  so it could potentially be used for something else in the future.
 */
 
 use std::{

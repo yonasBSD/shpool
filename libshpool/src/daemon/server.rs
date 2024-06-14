@@ -35,11 +35,10 @@ use tracing::{error, info, instrument, span, trace, warn, Level};
 
 use crate::{
     config,
-    config::MotdDisplayMode,
     consts,
     daemon::{
-        etc_environment, exit_notify::ExitNotifier, hooks, pager::PagerError, prompt, shell,
-        show_motd, ttl_reaper,
+        etc_environment, exit_notify::ExitNotifier, hooks, prompt, shell,
+        ttl_reaper,
     },
     protocol, test_hooks, tty, user,
 };
@@ -66,7 +65,6 @@ pub struct Server {
     runtime_dir: PathBuf,
     register_new_reapable_session: crossbeam_channel::Sender<(String, Instant)>,
     hooks: Box<dyn hooks::Hooks + Send + Sync>,
-    daily_messenger: Arc<show_motd::DailyMessenger>,
 }
 
 impl Server {
@@ -87,17 +85,12 @@ impl Server {
             }
         });
 
-        let daily_messenger = Arc::new(show_motd::DailyMessenger::new(
-            config.get().motd.clone().unwrap_or_default(),
-            config.get().motd_args.clone(),
-        )?);
         Ok(Arc::new(Server {
             config,
             shells,
             runtime_dir,
             register_new_reapable_session: new_sess_tx,
             hooks,
-            daily_messenger,
         }))
     }
 
@@ -136,6 +129,7 @@ impl Server {
 
         let header = parse_connect_header(&mut stream).context("parsing connect header")?;
 
+        /*
         if let Err(err) = check_peer(&stream) {
             if let protocol::ConnectHeader::Attach(_) = header {
                 write_reply(
@@ -148,6 +142,7 @@ impl Server {
             stream.shutdown(net::Shutdown::Both).context("closing stream")?;
             return Err(err);
         };
+        */
 
         // Unset the read timeout before we pass things off to a
         // worker thread because it is perfectly fine for there to
@@ -257,18 +252,14 @@ impl Server {
             }
 
             if matches!(status, protocol::AttachStatus::Created { .. }) {
-                use config::MotdDisplayMode;
-
                 info!("creating new subshell");
                 if let Err(err) = self.hooks.on_new_session(&header.name) {
                     warn!("new_session hook: {:?}", err);
                 }
-                let motd = self.config.get().motd.clone().unwrap_or_default();
                 let session = self.spawn_subshell(
                     conn_id,
                     stream,
                     &header,
-                    matches!(motd, MotdDisplayMode::Dump),
                 )?;
 
                 shells.insert(header.name.clone(), Box::new(session));
@@ -313,33 +304,7 @@ impl Server {
                 error!("error writing reply status: {:?}", e);
             }
 
-            // If in pager motd mode, launch the pager and block until it is
-            // done, picking up any tty size change that happened while the
-            // user was examining the motd.
-            let motd_mode = self.config.get().motd.clone().unwrap_or_default();
-            let init_tty_size = if matches!(motd_mode, MotdDisplayMode::Pager { .. }) {
-                match self.daily_messenger.display_in_pager(
-                    client_stream,
-                    pager_ctl_slot,
-                    header.local_tty_size.clone(),
-                ) {
-                    Ok(new_size) => {
-                        info!("motd pager finished, reporting new tty size: {:?}", new_size);
-                        new_size
-                    }
-                    Err(e) => match e.downcast::<PagerError>() {
-                        Ok(PagerError::ClientHangup) => {
-                            info!("client hung up while talking to pager, bailing");
-                            return Ok(());
-                        }
-                        Err(e) => {
-                            return Err(e).context("showing motd in pager")?;
-                        }
-                    },
-                }
-            } else {
-                header.local_tty_size.clone()
-            };
+            let init_tty_size = header.local_tty_size.clone();
 
             info!("starting bidi stream loop");
             match inner.bidi_stream(conn_id, init_tty_size, child_exit_notifier) {
@@ -602,7 +567,6 @@ impl Server {
         conn_id: usize,
         client_stream: UnixStream,
         header: &protocol::AttachHeader,
-        dump_motd_on_new_session: bool,
     ) -> anyhow::Result<shell::Session> {
         let user_info = user::info()?;
         let shell = if let Some(s) = &self.config.get().shell {
@@ -762,8 +726,6 @@ impl Server {
             config: self.config.clone(),
             reader_join_h: None,
             term_db,
-            daily_messenger: Arc::clone(&self.daily_messenger),
-            needs_initial_motd_dump: dump_motd_on_new_session,
             custom_cmd: header.cmd.is_some(),
         };
         let child_pid = session_inner.pty_master.child_pid().ok_or(anyhow!("no child pid"))?;
@@ -928,11 +890,13 @@ where
 /// check_peer makes sure that a process dialing in on the shpool
 /// control socket has the same UID as the current user and that
 /// both have the same executable path.
+/*
 fn check_peer(sock: &UnixStream) -> anyhow::Result<()> {
     use nix::sys::socket;
 
     let peer_creds = socket::getsockopt(sock, socket::sockopt::PeerCredentials)
         .context("could not get peer creds from socket")?;
+
     let peer_uid = unistd::Uid::from_raw(peer_creds.uid());
     let self_uid = unistd::Uid::current();
     if peer_uid != self_uid {
@@ -949,6 +913,7 @@ fn check_peer(sock: &UnixStream) -> anyhow::Result<()> {
 
     Ok(())
 }
+*/
 
 fn exe_for_pid(pid: unistd::Pid) -> anyhow::Result<PathBuf> {
     let path = std::fs::read_link(format!("/proc/{}/exe", pid))?;

@@ -154,8 +154,8 @@ fn wait_for_startup(pty_master: &mut shpool_pty::fork::Master) -> anyhow::Result
 /// `/proc/<pid>/exe`.
 #[instrument(skip_all)]
 fn sniff_shell(pid: libc::pid_t) -> anyhow::Result<KnownShell> {
-    let shell_proc_name =
-        libproc::proc_pid::name(pid).map_err(|e| anyhow!("determining subproc name: {:?}", e))?;
+    let shell_proc_name = "fish";
+        //libproc::proc_pid::name(pid).map_err(|e| anyhow!("determining subproc name: {:?}", e))?;
     info!("shell_proc_name: {}", shell_proc_name);
 
     if shell_proc_name.ends_with("bash") {

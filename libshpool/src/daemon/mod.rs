@@ -26,7 +26,6 @@ mod pager;
 mod prompt;
 mod server;
 mod shell;
-mod show_motd;
 mod signals;
 mod systemd;
 mod trie;

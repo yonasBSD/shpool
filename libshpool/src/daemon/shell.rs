@@ -32,7 +32,7 @@ use tracing::{debug, error, info, instrument, span, trace, warn, Level};
 
 use crate::{
     consts,
-    daemon::{config, exit_notify::ExitNotifier, keybindings, pager::PagerCtl, prompt, show_motd},
+    daemon::{config, exit_notify::ExitNotifier, keybindings, pager::PagerCtl, prompt},
     protocol, test_hooks, tty,
 };
 
@@ -103,8 +103,6 @@ pub struct SessionInner {
     pub client_stream: Option<UnixStream>,
     pub config: config::Manager,
     pub term_db: Arc<termini::TermInfo>,
-    pub daily_messenger: Arc<show_motd::DailyMessenger>,
-    pub needs_initial_motd_dump: bool,
     pub custom_cmd: bool,
 
     /// The join handle for the always-on background reader thread.
@@ -200,9 +198,6 @@ impl SessionInner {
         // We only scan for the prompt sentinel if the user has not set up a
         // custom command.
         let mut has_seen_prompt_sentinel = self.custom_cmd;
-
-        let daily_messenger = Arc::clone(&self.daily_messenger);
-        let mut needs_initial_motd_dump = self.needs_initial_motd_dump;
 
         let mut pty_master = self.pty_master.is_parent()?;
         let watchable_master = pty_master;
@@ -492,16 +487,6 @@ impl SessionInner {
                     let chunk = protocol::Chunk { kind: protocol::ChunkKind::Data, buf };
 
                     let mut s = conn.sink.lock().unwrap();
-
-                    // If we still need to do an initial motd dump, it means we have just finished
-                    // dropping all the prompt setup stuff, we should dump the motd now before we
-                    // write the first chunk.
-                    if needs_initial_motd_dump {
-                        needs_initial_motd_dump = false;
-                        if let Err(e) = daily_messenger.dump(&mut *s, &term_db) {
-                            warn!("Error handling clear: {:?}", e);
-                        }
-                    }
 
                     let write_result = chunk.write_to(&mut *s).and_then(|_| s.flush());
                     if let Err(err) = write_result {
