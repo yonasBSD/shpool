@@ -127,7 +127,7 @@ impl Proc {
             .arg(&log_file)
             .arg("--socket")
             .arg(&socket_path)
-            .arg("--config-file")
+            .arg("--config")
             .arg(resolved_config)
             .arg("daemon");
         if args.listen_events {
@@ -270,7 +270,7 @@ impl Proc {
         let mut cmd = Command::new(shpool_bin()?);
         cmd.stdout(Stdio::piped()).stderr(Stdio::piped()).stdin(Stdio::piped());
         if let Some(config_file) = args.config {
-            cmd.arg("--config-file").arg(testdata_file(config_file));
+            cmd.arg("--config").arg(testdata_file(config_file));
         }
         cmd.arg("-v")
             .arg("--log-file")

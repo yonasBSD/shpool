@@ -87,7 +87,7 @@ the daemon is launched by systemd."
     pub socket: Option<String>,
 
     #[clap(short, long, action, help = "a toml file containing configuration")]
-    pub config_file: Option<String>,
+    pub config: Option<String>,
 
     #[clap(subcommand)]
     pub command: Commands,
@@ -246,13 +246,13 @@ pub fn run(args: Args, hooks: Option<Box<dyn hooks::Hooks + Send + Sync>>) -> an
     let res: anyhow::Result<()> = match args.command {
         Commands::Version => return Err(anyhow!("wrapper binary must handle version")),
         Commands::Daemon => daemon::run(
-            args.config_file,
+            args.config,
             runtime_dir,
             hooks.unwrap_or(Box::new(NoopHooks {})),
             socket,
         ),
         Commands::Attach { force, ttl, cmd, name } => {
-            attach::run(args.config_file, name, force, ttl, cmd, socket)
+            attach::run(args.config, name, force, ttl, cmd, socket)
         }
         Commands::Detach { sessions } => detach::run(sessions, socket),
         Commands::Kill { sessions } => kill::run(sessions, socket),

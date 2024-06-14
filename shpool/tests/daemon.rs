@@ -171,7 +171,7 @@ fn config() -> anyhow::Result<()> {
             .stderr(Stdio::piped())
             .arg("--socket")
             .arg(tmp_dir.path().join("shpool.socket"))
-            .arg("--config-file")
+            .arg("--config")
             .arg(support::testdata_file("empty.toml"))
             .arg("daemon")
             .spawn()

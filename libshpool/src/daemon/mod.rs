@@ -43,6 +43,7 @@ pub fn run(
     let config_manager = config::Manager::new(config_file.as_deref())?;
     let server = server::Server::new(config_manager, hooks, runtime_dir)?;
 
+    /*
     let (cleanup_socket, listener) = match systemd::activation_socket() {
         Ok(l) => {
             info!("using systemd activation socket");
@@ -53,6 +54,10 @@ pub fn run(
             (Some(socket.clone()), UnixListener::bind(&socket).context("binding to socket")?)
         }
     };
+    */
+    info!("activation socket: {:?}", socket);
+    let (cleanup_socket, listener) = (Some(socket.clone()), UnixListener::bind(&socket).context("binding to socket")?);
+
     // spawn the signal handler thread in the background
     signals::Handler::new(cleanup_socket.clone()).spawn()?;
 
