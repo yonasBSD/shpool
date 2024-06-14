@@ -168,6 +168,19 @@ impl Server {
         conn_id: usize,
         header: protocol::AttachHeader,
     ) -> anyhow::Result<()> {
+        // Load pty kernel module
+        let status = process::Command::new("kldstat")
+            .arg("-qm")
+            .arg("pty")
+            .status()
+            .expect("failed to execute process");
+
+        if !status.success() {
+            let _ = process::Command::new("doas kldload pty")
+                .status()
+                .expect("failed to execute process");
+        }
+
         // We don't currently populate any warnings, but we used to and we might
         // want to in the future, so it is not worth breaking the protocol over.
         let warnings = vec![];
